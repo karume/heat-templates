@@ -103,8 +103,8 @@ rabbitmq_user_permissions { ['neutron@/', 'nova@/']:
 class { '::keystone::client': }
 class { '::keystone::cron::token_flush': }
 class { '::keystone::db::mysql':
-  password => $keystone_db_password,
-  allowed_hosts        => '%',
+  password      => $keystone_db_password,
+  allowed_hosts => '%',
 }
 
 class { '::keystone':
@@ -141,7 +141,8 @@ class { '::keystone::endpoint':
 #--------------
 
 class { '::glance::db::mysql':
-  password => $glance_db_password,
+  password      => $glance_db_password,
+  allowed_hosts => '%',
 }
 
 include ::glance
@@ -196,7 +197,8 @@ class {'::midonet::midonet_api':
 #---------------
 
 class { '::neutron::db::mysql':
-  password => $neutron_db_password,
+  password      => $neutron_db_password,
+  allowed_hosts => '%',
 }
 
 class { '::neutron::keystone::auth':
@@ -253,7 +255,8 @@ class { '::neutron::server::notifications':
 #------------
 
 class { '::nova::db::mysql':
-  password => 'nova',
+  password      => 'nova',
+  allowed_hosts => '%',
 }
 
 class { '::nova::keystone::auth':
