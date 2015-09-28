@@ -1,7 +1,5 @@
 node default {
 
-# for AIO deployments + MidoNet
-
 $openstack_release = 'kilo'
 $keystone_admin_password = 'supersecret'
 $rabbitmq_password = 'megasecret'
@@ -14,16 +12,6 @@ $neutron_db_password = 'secret'
 $neutron_db_host = 'localhost'
 $nova_db_password = 'secret'
 $nova_db_host = 'localhost'
-
-# class { 'openstack::db::mysql':
-#    mysql_root_password  => 'changeme',
-#    keystone_db_password => 'changeme',
-#    glance_db_password   => 'changeme',
-#    nova_db_password     => 'changeme',
-#    cinder_db_password   => 'changeme',
-#    neutron_db_password  => 'changeme',
-#    allowed_hosts        => ['127.0.0.1', '10.0.0.%'],
-#  }
 
 case $::osfamily {
   'Debian': {
@@ -104,7 +92,7 @@ class { '::keystone::client': }
 class { '::keystone::cron::token_flush': }
 class { '::keystone::db::mysql':
   password      => $keystone_db_password,
-  allowed_hosts => '%',
+  allowed_hosts => ['%', 'localhost'],
 }
 
 class { '::keystone':
@@ -142,7 +130,7 @@ class { '::keystone::endpoint':
 
 class { '::glance::db::mysql':
   password      => $glance_db_password,
-  allowed_hosts => '%',
+  allowed_hosts => ['%', 'localhost'],
 }
 
 include ::glance
@@ -184,7 +172,7 @@ class {'::midonet::midonet_api':
   keystone_auth        => true,
   keystone_host        => 'localhost',
   keystone_admin_token => $keystone_admin_password,
-  keystone_tenant_name => 'admin',
+  keystone_tenant_name => 'services',
 #  bind_address         => $::ipaddress_br_mgmt,
   api_ip               => 'localhost',
   api_port             => '8080',
@@ -198,12 +186,51 @@ class {'::midonet::midonet_api':
 
 class { '::neutron::db::mysql':
   password      => $neutron_db_password,
-  allowed_hosts => '%',
+  allowed_hosts => ['%', 'localhost'],
 }
 
 class { '::neutron::keystone::auth':
   password => $keystone_admin_password,
 }
+
+ensure_resource('file', '/etc/neutron/plugins/midonet', {
+    ensure => directory,
+    owner  => 'root',
+    group  => 'neutron',
+    mode   => '0640'}
+  )
+
+  neutron_plugin_midonet {
+    'MIDONET/midonet_uri':  value => 'http://localhost:8080/midonet-api';
+    'MIDONET/username':     value => 'neutron';
+    'MIDONET/password':     value => '32kjaxT0k3na';
+    'MIDONET/project_id':   value => 'services';
+  } ->
+
+  package {'python-neutron-plugin-midonet':
+    ensure => present
+  }
+
+  if $::osfamily == 'Debian' {
+      file_line { '/etc/default/neutron-server:NEUTRON_PLUGIN_CONFIG':
+        path    => '/etc/default/neutron-server',
+        match   => '^NEUTRON_PLUGIN_CONFIG=(.*)$',
+        line    => "NEUTRON_PLUGIN_CONFIG=/etc/neutron/plugins/midonet/midonet.ini",
+        notify  => Service['neutron-server'],
+    }
+  }
+
+  # In RH, this link is used to start Neutron process but in Debian, it's used only
+  # to manage database synchronization.
+  if defined(File['/etc/neutron/plugin.ini']) {
+    File <| path == '/etc/neutron/plugin.ini' |> { target => '/etc/neutron/plugins/midonet/midonet.ini' }
+  }
+  else {
+    file {'/etc/neutron/plugin.ini':
+      ensure  => link,
+      target  => '/etc/neutron/plugins/midonet/midonet.ini'
+    }
+  }
 
 class { '::neutron':
   rabbit_user           => 'neutron',
@@ -255,8 +282,8 @@ class { '::neutron::server::notifications':
 #------------
 
 class { '::nova::db::mysql':
-  password      => 'nova',
-  allowed_hosts => '%',
+  password      => $nova_db_password,
+  allowed_hosts => ['%', 'localhost'],
 }
 
 class { '::nova::keystone::auth':
@@ -283,7 +310,7 @@ class { '::nova::api':
 class { '::nova::cert': }
 class { '::nova::client': }
 class { '::nova::conductor': }
-class { '::nova::consoleauth': }
+#class { '::nova::consoleauth': }
 class { '::nova::cron::archive_deleted_rows': }
 class { '::nova::compute': vnc_enabled => true }
 
@@ -293,7 +320,7 @@ class { '::nova::compute::libvirt':
   vncserver_listen  => '0.0.0.0',
 }
 
-class { '::nova::scheduler': }
+#class { '::nova::scheduler': }
 class { '::nova::vncproxy': }
 
 class { '::nova::network::neutron':
